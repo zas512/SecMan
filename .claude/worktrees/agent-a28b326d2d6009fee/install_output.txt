@@ -1,5 +1,0 @@
-npm error code EUNKNOWNCONFIG
-npm error Unknown cli flag:
-npm error   - --ignore-workspaces
-npm error Run `npm help config` for supported options.
-npm error A complete log of this run can be found in: C:\Users\PC\AppData\Local\npm-cache\_logs\2026-09-25T09_41_46_416Z-debug-0.log
