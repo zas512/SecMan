@@ -10,13 +10,13 @@
     "test": "jest"
   },
   "dependencies": {
-    "@secman/core": "workspace:*",
-    "@secman/crypto": "workspace:*",
-    "@secman/github": "workspace:*",
-    "@secman/dotenv": "workspace:*",
-    "@secman/config": "workspace:*",
-    "@secman/keychain": "workspace:*",
-    "@secman/process": "workspace:*"
+    "@secman/core": "0.1.0",
+    "@secman/crypto": "0.1.0",
+    "@secman/github": "0.1.0",
+    "@secman/dotenv": "0.1.0",
+    "@secman/config": "0.1.0",
+    "@secman/keychain": "0.1.0",
+    "@secman/process": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

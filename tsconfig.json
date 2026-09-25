@@ -15,15 +15,14 @@
     "sourceMap": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "baseUrl": ".",
     "paths": {
-      "@secman/core": ["packages/core/src/index.ts"],
-      "@secman/crypto": ["packages/crypto/src/index.ts"],
-      "@secman/github": ["packages/github/src/index.ts"],
-      "@secman/dotenv": ["packages/dotenv/src/index.ts"],
-      "@secman/keychain": ["packages/keychain/src/index.ts"],
-      "@secman/process": ["packages/process/src/index.ts"],
-      "@secman/config": ["packages/config/src/index.ts"]
+      "@secman/core": ["./packages/core/src/index.ts"],
+      "@secman/crypto": ["./packages/crypto/src/index.ts"],
+      "@secman/github": ["./packages/github/src/index.ts"],
+      "@secman/dotenv": ["./packages/dotenv/src/index.ts"],
+      "@secman/keychain": ["./packages/keychain/src/index.ts"],
+      "@secman/process": ["./packages/process/src/index.ts"],
+      "@secman/config": ["./packages/config/src/index.ts"]
     }
   },
   "include": ["packages/**/*.ts", "apps/**/*.ts", "tests/**/*.ts"],
