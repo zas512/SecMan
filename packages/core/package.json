@@ -1,0 +1,22 @@
+{
+  "name": "@secman/core",
+  "version": "0.1.0",
+  "description": "SecMan core logic - project, environment, secret management, sync orchestration",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@secman/crypto": "*",
+    "@secman/github": "*",
+    "@secman/dotenv": "*",
+    "@secman/config": "*",
+    "@secman/keychain": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}

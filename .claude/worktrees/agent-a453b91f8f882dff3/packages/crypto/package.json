@@ -1,0 +1,19 @@
+{
+  "name": "@secman/crypto",
+  "version": "0.1.0",
+  "description": "SecMan encryption module - KDF, encryption, decryption, integrity validation",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "argon2": "^0.41.0",
+    "crypto": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}

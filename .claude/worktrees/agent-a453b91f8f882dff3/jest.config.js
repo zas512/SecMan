@@ -1,0 +1,1 @@
+module.exports = { testEnvironment: "node", roots: ["<rootDir>/tests"], testMatch: ["**/*.test.ts"], moduleNameMapper: { "^@secman/(.*)$": "<rootDir>/packages/$1/src/index.ts" }, collectCoverageFrom: ["packages/*/src/index.ts"] };

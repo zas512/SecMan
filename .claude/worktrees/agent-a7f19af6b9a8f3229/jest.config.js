@@ -1,0 +1,1 @@
+module.exports = { preset: 'ts-jest', testEnvironment: 'node', roots: ['<rootDir>/tests'], testMatch: ['**/*.test.ts'], moduleNameMapper: { '^@secman/(.*)$': '<rootDir>/packages//src/index.ts' }, transform: { '^.+\.tsx?$': 'ts-jest' }, collectCoverageFrom: ['packages/*/src/index.ts'] };

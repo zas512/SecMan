@@ -1,0 +1,26 @@
+{
+  "name": "apps/cli",
+  "version": "0.1.0",
+  "description": "SecMan CLI application",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "ts-node --project tsconfig.json apps/cli/index.ts",
+    "start": "node dist/apps/cli/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@secman/core": "workspace:*",
+    "@secman/crypto": "workspace:*",
+    "@secman/github": "workspace:*",
+    "@secman/dotenv": "workspace:*",
+    "@secman/config": "workspace:*",
+    "@secman/keychain": "workspace:*",
+    "@secman/process": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
