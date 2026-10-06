@@ -83,7 +83,7 @@ Creates a private `<name>-secrets` GitHub repository, `.secman/` metadata, and e
 
 ### Sync
 - `secman push [--env <name>]` — encrypt `.env` plus the selected environment's dotenv files, upload to GitHub, update manifest
-- `secman pull [--env <name>]` — download, verify integrity, decrypt, merge, and write `.env.<name>`
+- `secman pull [--env <name>]` — download, verify integrity, decrypt, replace `.env.<name>` with the remote environment
 - `secman diff` — compare local vs remote (names only — no values shown)
 - `secman sync` — show sync status (`local` / `remote` counts, `synchronized` / `diverged` / `local_only` / `remote_only`)
 
@@ -180,7 +180,7 @@ secman/
 1. Set `GITHUB_TOKEN`, then run `secman init -n app -e dev` — creates a private repository, `.secman/`, and a manifest
 2. Add secrets to `.env` or `.env.dev`; `.env` values are shared defaults and environment-specific files override them
 3. `secman push` — uploads `.enc` to GitHub private repo; updates manifest
-4. `secman pull` (on a second machine with the same project, token, and passphrase) — downloads `.enc`, verifies integrity, decrypts, and writes `.env.dev`
+4. `secman pull` (on a second machine with the same project, token, and passphrase) — downloads `.enc`, verifies integrity, decrypts, and replaces `.env.dev`. Shared `.env` defaults remain unchanged.
 
 ### Security Checks (Doctor)
 `secman doctor` verifies:
