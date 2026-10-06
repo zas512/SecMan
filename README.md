@@ -36,7 +36,8 @@ Secure, GitHub-backed environment and secret synchronization CLI for developers.
 - Node 18+ / pnpm 8+
 - Windows / macOS / Linux
 - OS keychain support (for `keytar` / credential storage) — or set `SECMAN_PASSPHRASE` as fallback
-- GitHub Personal Access Token (for push/pull) — add to `.env`: `GITHUB_TOKEN=ghp_...`
+- GitHub Personal Access Token — set `GITHUB_TOKEN` in the shell before running SecMan
+- Use the same `SECMAN_PASSPHRASE` on each machine, or enter the same passphrase when `secman init` prompts
 
 ### Install
 ```bash
@@ -50,7 +51,7 @@ pnpm run build
 ```bash
 secman init -n my-app -e development
 ```
-Creates `.secman/` directory, `.gitignore` (protects `.env`), environment metadata, and sets up encryption credentials (keychain or env fallback).
+Creates a private `<name>-secrets` GitHub repository, `.secman/` metadata, and encryption credentials in the OS keychain. If `SECMAN_PASSPHRASE` is not set, SecMan prompts for it without echoing the input. The passphrase is needed to decrypt on other machines; provide the same value there.
 
 ---
 
@@ -81,8 +82,8 @@ Creates `.secman/` directory, `.gitignore` (protects `.env`), environment metada
 - `secman export [--file <output>]` — decrypt environment, write `.env` (restrictive permissions)
 
 ### Sync
-- `secman push` — encrypt local secrets, upload to GitHub, update manifest
-- `secman pull [--env <name>]` — download, verify integrity, decrypt, merge
+- `secman push [--env <name>]` — encrypt `.env` plus the selected environment's dotenv files, upload to GitHub, update manifest
+- `secman pull [--env <name>]` — download, verify integrity, decrypt, merge, and write `.env.<name>`
 - `secman diff` — compare local vs remote (names only — no values shown)
 - `secman sync` — show sync status (`local` / `remote` counts, `synchronized` / `diverged` / `local_only` / `remote_only`)
 
@@ -176,10 +177,10 @@ secman/
 ## How Flows Work
 
 ### Init → Import → Push → Pull
-1. `secman init -n app -e dev` — creates `.secman/`, `.gitignore`, manifest
-2. `echo 'DB=secret' > .env` + `secman import` — encrypts and saves `.secman/environments/dev.enc`
+1. Set `GITHUB_TOKEN`, then run `secman init -n app -e dev` — creates a private repository, `.secman/`, and a manifest
+2. Add secrets to `.env` or `.env.dev`; `.env` values are shared defaults and environment-specific files override them
 3. `secman push` — uploads `.enc` to GitHub private repo; updates manifest
-4. `secman pull` (on second machine with same project + auth) — downloads `.enc`, verifies integrity, decrypts, merges local `.env`
+4. `secman pull` (on a second machine with the same project, token, and passphrase) — downloads `.enc`, verifies integrity, decrypts, and writes `.env.dev`
 
 ### Security Checks (Doctor)
 `secman doctor` verifies:

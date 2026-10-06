@@ -7,6 +7,7 @@ import * as path from 'path';
 import { Core } from '@secman/core';
 import { loadProjectConfig, saveProjectConfig } from '@secman/config';
 import { parse as parseDotenv } from '@secman/dotenv';
+import prompts from 'prompts';
 
 export class SecManCLI {
   private core: Core;
@@ -31,12 +32,30 @@ export class SecManCLI {
       .option('-n, --name <name>', 'Project name')
       .option('-e, --env <name>', 'Default environment')
       .action(async (options) => {
+        const configuredPassphrase = process.env.SECMAN_PASSPHRASE;
         try {
+          if (!configuredPassphrase) {
+            const response = await prompts({
+              type: 'password',
+              name: 'passphrase',
+              message: 'Set an encryption passphrase (use the same passphrase on other machines)'
+            });
+            if (!response.passphrase) {
+              throw new Error('Initialization cancelled: an encryption passphrase is required');
+            }
+            process.env.SECMAN_PASSPHRASE = response.passphrase;
+          }
           await this.core.init(options.name || 'my-project', options.env || 'development');
           console.log('✓ Project initialized successfully');
         } catch (error) {
           console.error(`✗ Initialization failed: ${(error as Error).message}`);
           process.exitCode = 1;
+        } finally {
+          if (configuredPassphrase === undefined) {
+            delete process.env.SECMAN_PASSPHRASE;
+          } else {
+            process.env.SECMAN_PASSPHRASE = configuredPassphrase;
+          }
         }
       });
 

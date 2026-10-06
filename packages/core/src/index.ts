@@ -60,6 +60,9 @@ export class Core {
   async init(projectName: string, environmentName: string): Promise<void> {
     this.validateEnvironmentName(environmentName);
     if (!projectName.trim()) throw new Error('Project name is required');
+    if (!process.env.SECMAN_PASSPHRASE) {
+      throw new Error('Set SECMAN_PASSPHRASE before initializing the project');
+    }
 
     await this.ensureGitHubClient();
 
@@ -217,7 +220,8 @@ export class Core {
     if (!this.project) return;
     const existing = await keychainInstance.getEncryptionCredential(this.project.id);
     if (!existing) {
-      const passphrase = process.env.SECMAN_PASSPHRASE || cryptoInstance.generateSalt().toString('base64url');
+      const passphrase = process.env.SECMAN_PASSPHRASE;
+      if (!passphrase) throw new Error('SECMAN_PASSPHRASE is required to initialize encryption');
       await keychainInstance.storeEncryptionCredential({
         projectId: this.project.id,
         passphrase,
@@ -371,8 +375,8 @@ export class Core {
   async push(envName: string): Promise<void> {
     this.validateEnvironmentName(envName);
     this.restoreProjectState();
-    await this.ensureGitHubClient();
     if (!this.project) throw new Error(redactMessage('Project not initialized'));
+    await this.ensureGitHubClient();
 
     const secrets = await this.loadEnvFiles(envName);
     const passphrase = await this.getPassphrase();
@@ -404,8 +408,8 @@ export class Core {
   async pull(envName: string): Promise<void> {
     this.validateEnvironmentName(envName);
     this.restoreProjectState();
-    await this.ensureGitHubClient();
     if (!this.project) throw new Error('Project not initialized');
+    await this.ensureGitHubClient();
     const remote = await this.github.getFile(
       this.project.repository.owner,
       this.project.repository.repo,
@@ -463,8 +467,16 @@ export class Core {
   private async getPassphrase(): Promise<string> {
     if (!this.project) throw new Error('Project not initialized');
     const cred = await keychainInstance.getEncryptionCredential(this.project.id);
-    if (!cred) throw new Error(redactMessage('Encryption passphrase not set'));
-    return cred.passphrase;
+    if (cred) return cred.passphrase;
+
+    const passphrase = process.env.SECMAN_PASSPHRASE;
+    if (!passphrase) throw new Error(redactMessage('Encryption passphrase not set'));
+    await keychainInstance.storeEncryptionCredential({
+      projectId: this.project.id,
+      passphrase,
+      createdAt: new Date().toISOString()
+    });
+    return passphrase;
   }
 
   private restoreProjectState(): void {
