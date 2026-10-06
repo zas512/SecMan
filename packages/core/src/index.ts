@@ -3,11 +3,13 @@
 
 import { Crypto, cryptoInstance } from '@secman/crypto';
 import { GitHubClient } from '@secman/github';
-import { parse, load as loadEnvFile, write, merge, diff, discoverEnvFiles, serialize } from '@secman/dotenv';
+import { parse, load as loadEnvFile, write, merge, diff, discoverEnvFilesForEnvironment, serialize } from '@secman/dotenv';
+import { existsSync } from 'fs';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { randomBytes } from 'crypto';
 import { keychainInstance } from '@secman/keychain';
-import { loadManifest, loadProjectConfig, saveProjectConfig } from '@secman/config';
+import { loadManifest, loadProjectConfig, saveManifest, saveProjectConfig } from '@secman/config';
 import { redactMessage } from './redact';
 
 export interface ProjectConfig {
@@ -257,17 +259,12 @@ export class Core {
    * Discover and load .env files
    */
   async loadEnvFiles(envName?: string): Promise<Record<string, string>> {
-    const discoveredFiles = discoverEnvFiles(this.projectRoot);
-    const envFiles = envName
-      ? [
-          '.env',
-          '.env.local',
-          `.env.${envName}`,
-          `.env.${envName}.local`
-        ]
-          .map((file) => path.join(this.projectRoot, file))
-          .filter((file) => discoveredFiles.includes(file))
-      : discoveredFiles;
+    const targetEnvironment = envName || this.project?.defaultEnvironment;
+    const envFiles = targetEnvironment
+      ? discoverEnvFilesForEnvironment(this.projectRoot, targetEnvironment)
+      : ['.env', '.env.local']
+          .map(file => path.join(this.projectRoot, file))
+          .filter(file => existsSync(file));
     if (envFiles.length === 0) {
       return {};
     }
@@ -437,19 +434,17 @@ export class Core {
       throw new Error('Remote environment data has an invalid format');
     }
 
-    const local = await this.loadEnvFiles(envName);
-    const merged = merge(local, parsed);
     const envDir = path.join(this.projectRoot, '.secman', 'environments');
     await fs.mkdir(envDir, { recursive: true });
-    await fs.writeFile(path.join(envDir, `${envName}.enc`), JSON.stringify(envelope), { mode: 0o600 });
-    await fs.writeFile(path.join(this.projectRoot, `.env.${envName}`), serialize(merged), { mode: 0o600 });
+    await this.atomicWriteFile(path.join(envDir, `${envName}.enc`), JSON.stringify(envelope));
+    await this.atomicWriteFile(path.join(this.projectRoot, `.env.${envName}`), serialize(parsed));
   }
 
   /**
    * Show difference between local and remote secret names only
    */
   async diff(envName: string): Promise<{ added: string[]; removed: string[]; changed: string[] }> {
-    const local = await this.loadEnvFiles();
+    const local = await this.loadEnvFiles(this.project.defaultEnvironment);
     if (!this.project) return { added: Object.keys(local), removed: [], changed: [] };
     const remoteFile = await this.github.getFile(
       this.project.repository.owner,
@@ -553,19 +548,47 @@ export class Core {
     }
   }
 
+  private async atomicWriteFile(filePath: string, content: string): Promise<void> {
+    const temporaryPath = `${filePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+    try {
+      await fs.writeFile(temporaryPath, content, { mode: 0o600, flag: 'wx' });
+      await fs.rename(temporaryPath, filePath);
+    } catch (error) {
+      try {
+        await fs.unlink(temporaryPath);
+      } catch (cleanupError) {
+        if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') throw cleanupError;
+      }
+      throw error;
+    }
+  }
+
   private async updateManifest(envName: string): Promise<void> {
     if (!this.project) return;
-    const secmanDir = path.join(this.projectRoot, '.secman');
-    const manifestPath = path.join(secmanDir, 'manifest.json');
-    let manifest: any = { formatVersion: 1, environments: [envName], createdAt: new Date().toISOString() };
-    try {
-      manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
-    } catch { }
-    const envs = new Set(manifest.environments || []);
+    const existingManifest = loadManifest(this.projectRoot);
+    if (existingManifest && existingManifest.projectId !== this.project.id) {
+      throw new Error('SecMan manifest belongs to a different project');
+    }
+    const now = new Date().toISOString();
+    const manifest = existingManifest || {
+      formatVersion: 1,
+      projectId: this.project.id,
+      projectName: this.project.name,
+      repository: { owner: this.project.repository.owner, repo: this.project.repository.repo },
+      defaultEnvironment: this.project.defaultEnvironment,
+      createdAt: this.project.createdAt,
+      updatedAt: now,
+      environments: []
+    };
+    const envs = new Set(manifest.environments);
     envs.add(envName);
-    manifest.environments = Array.from(envs);
-    manifest.updatedAt = new Date().toISOString();
-    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    saveManifest(this.projectRoot, {
+      ...manifest,
+      repository: { owner: this.project.repository.owner, repo: this.project.repository.repo },
+      defaultEnvironment: this.project.defaultEnvironment,
+      environments: Array.from(envs),
+      updatedAt: now
+    });
   }
 
   /**
@@ -575,7 +598,7 @@ export class Core {
     if (!this.project) {
       throw new Error('Project not initialized');
     }
-    const local = await this.loadEnvFiles();
+    const local = await this.loadEnvFiles(this.project?.defaultEnvironment);
     const localCount = Object.keys(local).length;
     let remoteCount = 0;
     try {

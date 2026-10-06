@@ -72,16 +72,17 @@ export function loadManifest(projectRoot: string): ManifestConfig | null {
     return null;
   }
 
+  let manifest: unknown;
   try {
     const content = fs.readFileSync(manifestPath, 'utf8');
-    const manifest: unknown = JSON.parse(content);
-    if (!validateManifest(manifest)) {
-      throw new Error('manifest.json has an invalid structure');
-    }
-    return manifest;
+    manifest = JSON.parse(content);
   } catch (e) {
     throw new Error(`Failed to parse manifest.json: ${(e as Error).message}`);
   }
+  if (!validateManifest(manifest)) {
+    throw new Error('Invalid manifest.json structure');
+  }
+  return manifest;
 }
 
 /**
