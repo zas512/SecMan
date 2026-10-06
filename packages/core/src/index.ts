@@ -68,6 +68,9 @@ export class Core {
     if (existingProject) {
       throw new Error(`Project "${projectName}" already exists`);
     }
+    if (this.project) {
+      throw new Error(`SecMan project "${this.project.name}" is already initialized in this directory`);
+    }
 
     // Find GitHub repository
     const repoConfig = await this.findOrCreateRepository(projectName);
@@ -514,8 +517,7 @@ export class Core {
   }
 
   private async ensureGitHubClient(): Promise<void> {
-    const storedToken = await keychainInstance.getGitHubToken();
-    const token = process.env.GITHUB_TOKEN || storedToken?.token;
+    const token = process.env.GITHUB_TOKEN || (await keychainInstance.getGitHubToken())?.token;
     if (!token) {
       throw new Error('GitHub authentication is required. Set GITHUB_TOKEN or store a GitHub token in the system keychain.');
     }
