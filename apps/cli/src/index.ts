@@ -36,6 +36,7 @@ export class SecManCLI {
           console.log('✓ Project initialized successfully');
         } catch (error) {
           console.error(`✗ Initialization failed: ${(error as Error).message}`);
+          process.exitCode = 1;
         }
       });
 
@@ -109,8 +110,15 @@ export class SecManCLI {
     this.program
       .command('push')
       .description('Push encrypted secrets to GitHub')
-      .action(async () => {
-        console.log('push not yet implemented');
+      .option('-e, --env <name>', 'Environment', this.core.getCurrentEnvironment()?.name || 'development')
+      .action(async (options) => {
+        try {
+          await this.core.push(options.env);
+          console.log(`✓ Pushed ${options.env} secrets successfully`);
+        } catch (error) {
+          console.error(`✗ Push failed: ${(error as Error).message}`);
+          process.exitCode = 1;
+        }
       });
 
     // Pull command
@@ -119,7 +127,13 @@ export class SecManCLI {
       .description('Pull encrypted secrets from GitHub')
       .option('-e, --env <name>', 'Environment', 'development')
       .action(async (options) => {
-        console.log('pull not yet implemented');
+        try {
+          await this.core.pull(options.env);
+          console.log(`✓ Pulled ${options.env} secrets successfully`);
+        } catch (error) {
+          console.error(`✗ Pull failed: ${(error as Error).message}`);
+          process.exitCode = 1;
+        }
       });
 
     // Diff command
@@ -185,7 +199,7 @@ export class SecManCLI {
   }
 
   public async run(args: string[]): Promise<void> {
-    this.program.parse(args);
+    await this.program.parseAsync(args);
   }
 }
 
@@ -193,5 +207,8 @@ export class SecManCLI {
 if (require.main === module) {
   const projectRoot = process.cwd();
   const cli = new SecManCLI(projectRoot);
-  cli.run(process.argv.slice(2));
+  cli.run(process.argv.slice(2)).catch((error) => {
+    console.error(`✗ SecMan command failed: ${(error as Error).message}`);
+    process.exitCode = 1;
+  });
 }

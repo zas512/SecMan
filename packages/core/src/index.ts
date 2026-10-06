@@ -7,6 +7,7 @@ import { parse, load as loadEnvFile, write, merge, diff, discoverEnvFiles, seria
 import { promises as fs } from 'fs';
 import path from 'path';
 import { keychainInstance } from '@secman/keychain';
+import { loadManifest, loadProjectConfig, saveProjectConfig } from '@secman/config';
 import { redactMessage } from './redact';
 
 export interface ProjectConfig {
@@ -49,13 +50,19 @@ export class Core {
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
     this.crypto = cryptoInstance;
-    this.github = new GitHubClient();
+    this.github = new GitHubClient({ token: process.env.GITHUB_TOKEN });
+    this.restoreProjectState();
   }
 
   /**
    * Initialize a new SecMan project
    */
   async init(projectName: string, environmentName: string): Promise<void> {
+    this.validateEnvironmentName(environmentName);
+    if (!projectName.trim()) throw new Error('Project name is required');
+
+    await this.ensureGitHubClient();
+
     // Check if project already exists
     const existingProject = this.findProject(projectName);
     if (existingProject) {
@@ -86,35 +93,50 @@ export class Core {
 
     // Setup .gitignore protection
     await this.protectEnvFile();
+
+    saveProjectConfig(this.projectRoot, {
+      version: 1,
+      project: projectName,
+      repository: {
+        owner: repoConfig.owner,
+        name: repoConfig.repo
+      },
+      defaultEnvironment: environmentName,
+      environments: [environmentName],
+      createdAt: this.project.createdAt,
+      updatedAt: this.project.updatedAt
+    });
   }
 
   /**
    * Find existing project by name
    */
   private findProject(projectName: string): ProjectConfig | null {
-    // In MVP, project ID is stored in manifest.json
-    // For now, we'll implement basic detection
-    return null;
+    return this.project?.name === projectName ? this.project : null;
   }
 
   /**
    * Find or create GitHub repository
    */
   private async findOrCreateRepository(projectName: string): Promise<{ owner: string; repo: string }> {
-    // In MVP, we'll assume the user provides the repository name
-    // For now, we'll create a default name
     const repoName = `${projectName}-secrets`;
-    const owner = 'github-user'; // This should be determined by auth
+    const auth = await this.github.getAuthStatus();
+    if (!auth.authenticated || !auth.user) {
+      throw new Error(auth.error || 'GitHub authentication is required. Set GITHUB_TOKEN or store a GitHub token in the system keychain.');
+    }
 
-    // Check if repo exists
-    const exists = await this.github.repositoryExists(owner, repoName);
-    if (exists) {
+    const owner = auth.user;
+
+    const existingRepository = await this.github.getRepository(owner, repoName);
+    if (existingRepository) {
+      if (!existingRepository.private) {
+        throw new Error(`Repository ${owner}/${repoName} is public; SecMan requires a private repository for encrypted secrets`);
+      }
       return { owner, repo: repoName };
     }
 
-    // Create new repository
-    await this.github.createPrivateRepository(repoName);
-    return { owner, repo: repoName };
+    const repository = await this.github.createPrivateRepository(repoName);
+    return { owner: repository.owner, repo: repository.repo };
   }
 
   /**
@@ -159,6 +181,7 @@ export class Core {
       projectId: this.project.id,
       projectName: this.project.name,
       repository: this.project.repository,
+      defaultEnvironment: this.project.defaultEnvironment,
       createdAt: this.project.createdAt,
       updatedAt: this.project.updatedAt,
       environments: Array.from(this.environments.keys())
@@ -191,7 +214,7 @@ export class Core {
     if (!this.project) return;
     const existing = await keychainInstance.getEncryptionCredential(this.project.id);
     if (!existing) {
-      const passphrase = process.env.SECMAN_PASSPHRASE || 'default-passphrase';
+      const passphrase = process.env.SECMAN_PASSPHRASE || cryptoInstance.generateSalt().toString('base64url');
       await keychainInstance.storeEncryptionCredential({
         projectId: this.project.id,
         passphrase,
@@ -215,8 +238,18 @@ export class Core {
   /**
    * Discover and load .env files
    */
-  async loadEnvFiles(): Promise<Record<string, string>> {
-    const envFiles = discoverEnvFiles(this.projectRoot);
+  async loadEnvFiles(envName?: string): Promise<Record<string, string>> {
+    const discoveredFiles = discoverEnvFiles(this.projectRoot);
+    const envFiles = envName
+      ? [
+          '.env',
+          '.env.local',
+          `.env.${envName}`,
+          `.env.${envName}.local`
+        ]
+          .map((file) => path.join(this.projectRoot, file))
+          .filter((file) => discoveredFiles.includes(file))
+      : discoveredFiles;
     if (envFiles.length === 0) {
       return {};
     }
@@ -333,12 +366,16 @@ export class Core {
    * Push environment secrets to GitHub
    */
   async push(envName: string): Promise<void> {
-    const secrets = await this.loadEnvFiles();
+    this.validateEnvironmentName(envName);
+    this.restoreProjectState();
+    await this.ensureGitHubClient();
+    if (!this.project) throw new Error(redactMessage('Project not initialized'));
+
+    const secrets = await this.loadEnvFiles(envName);
     const passphrase = await this.getPassphrase();
     const jsonStr = JSON.stringify(secrets);
     const envelope = await this.crypto.createEnvelope(Buffer.from(jsonStr, 'utf8'), passphrase);
     const contentStr = JSON.stringify(envelope);
-    if (!this.project) throw new Error(redactMessage('Project not initialized'));
     const repoPath = `.secman/environments/${envName}.enc`;
     await this.github.createOrUpdateFile(
       this.project.repository.owner,
@@ -347,6 +384,9 @@ export class Core {
       `Update secrets for ${envName}`,
       contentStr
     );
+    const envDir = path.join(this.projectRoot, '.secman', 'environments');
+    await fs.mkdir(envDir, { recursive: true });
+    await fs.writeFile(path.join(envDir, `${envName}.enc`), contentStr, { mode: 0o600 });
     // Update manifest + version backup (rotation)
     await this.updateManifest(envName);
     const versionsDir = path.join(this.projectRoot, '.secman', 'versions');
@@ -359,6 +399,9 @@ export class Core {
    * Pull environment secrets from GitHub
    */
   async pull(envName: string): Promise<void> {
+    this.validateEnvironmentName(envName);
+    this.restoreProjectState();
+    await this.ensureGitHubClient();
     if (!this.project) throw new Error('Project not initialized');
     const remote = await this.github.getFile(
       this.project.repository.owner,
@@ -371,12 +414,17 @@ export class Core {
     const passphrase = await this.getPassphrase();
     const decrypted = await this.crypto.openEnvelope(envelope, passphrase);
     const parsed = JSON.parse(decrypted.toString('utf8'));
-    // Compare and merge safely
-    const local = await this.loadEnvFiles();
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        Object.values(parsed).some((value) => typeof value !== 'string')) {
+      throw new Error('Remote environment data has an invalid format');
+    }
+
+    const local = await this.loadEnvFiles(envName);
     const merged = merge(local, parsed);
     const envDir = path.join(this.projectRoot, '.secman', 'environments');
     await fs.mkdir(envDir, { recursive: true });
     await fs.writeFile(path.join(envDir, `${envName}.enc`), JSON.stringify(envelope), { mode: 0o600 });
+    await fs.writeFile(path.join(this.projectRoot, `.env.${envName}`), serialize(merged), { mode: 0o600 });
   }
 
   /**
@@ -414,6 +462,70 @@ export class Core {
     const cred = await keychainInstance.getEncryptionCredential(this.project.id);
     if (!cred) throw new Error(redactMessage('Encryption passphrase not set'));
     return cred.passphrase;
+  }
+
+  private restoreProjectState(): void {
+    if (this.project) return;
+
+    const manifest = loadManifest(this.projectRoot);
+    if (!manifest) return;
+
+    const metadata = manifest as typeof manifest & {
+      repository?: { owner: string; repo?: string; name?: string };
+      defaultEnvironment?: string;
+    };
+    const fileConfig = loadProjectConfig(this.projectRoot);
+    const owner = metadata.repository?.owner || fileConfig?.repository.owner;
+    const repo = metadata.repository?.repo || metadata.repository?.name || fileConfig?.repository.name;
+    if (!manifest.projectId || !manifest.projectName || !owner || !repo) {
+      throw new Error('SecMan manifest is missing project or repository details');
+    }
+
+    const environmentNames = manifest.environments.length > 0
+      ? manifest.environments
+      : fileConfig?.environments || [];
+    const defaultEnvironment = metadata.defaultEnvironment ||
+      fileConfig?.defaultEnvironment ||
+      environmentNames[0] ||
+      'development';
+
+    this.project = {
+      id: manifest.projectId,
+      name: manifest.projectName,
+      repository: { owner, repo },
+      defaultEnvironment,
+      createdAt: manifest.createdAt,
+      updatedAt: manifest.updatedAt
+    };
+    for (const name of environmentNames) {
+      this.environments.set(name, {
+        name,
+        createdAt: manifest.createdAt,
+        updatedAt: manifest.updatedAt
+      });
+    }
+    if (!this.environments.has(defaultEnvironment)) {
+      this.environments.set(defaultEnvironment, {
+        name: defaultEnvironment,
+        createdAt: manifest.createdAt,
+        updatedAt: manifest.updatedAt
+      });
+    }
+  }
+
+  private async ensureGitHubClient(): Promise<void> {
+    const storedToken = await keychainInstance.getGitHubToken();
+    const token = process.env.GITHUB_TOKEN || storedToken?.token;
+    if (!token) {
+      throw new Error('GitHub authentication is required. Set GITHUB_TOKEN or store a GitHub token in the system keychain.');
+    }
+    this.github = new GitHubClient({ token });
+  }
+
+  private validateEnvironmentName(envName: string): void {
+    if (!/^[A-Za-z0-9_-]+$/.test(envName)) {
+      throw new Error('Environment names may contain only letters, numbers, hyphens, and underscores');
+    }
   }
 
   private async updateManifest(envName: string): Promise<void> {
