@@ -125,7 +125,7 @@ export class SecManCLI {
     this.program
       .command('pull')
       .description('Pull encrypted secrets from GitHub')
-      .option('-e, --env <name>', 'Environment', 'development')
+      .option('-e, --env <name>', 'Environment', this.core.getCurrentEnvironment()?.name || 'development')
       .action(async (options) => {
         try {
           await this.core.pull(options.env);
