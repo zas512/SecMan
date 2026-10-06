@@ -2,11 +2,7 @@
 // CLI entry point for SecMan
 
 import { Command } from 'commander';
-import { promises as fs } from 'fs';
-import * as path from 'path';
 import { Core } from '@secman/core';
-import { loadProjectConfig, saveProjectConfig } from '@secman/config';
-import { parse as parseDotenv } from '@secman/dotenv';
 import prompts from 'prompts';
 
 export class SecManCLI {

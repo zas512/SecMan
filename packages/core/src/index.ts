@@ -235,10 +235,21 @@ export class Core {
    */
   private async protectEnvFile(): Promise<void> {
     const gitignorePath = path.join(this.projectRoot, '.gitignore');
-    const gitignoreContent = `.env
+    let gitignoreContent = '';
+    try {
+      gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+
+    const secmanRules = `# SecMan environment files
+.env
 .env.*
 !.env.example
 `;
+    if (!gitignoreContent.includes('# SecMan environment files')) {
+      gitignoreContent = `${gitignoreContent.trimEnd()}${gitignoreContent ? '\n\n' : ''}${secmanRules}`;
+    }
     await fs.writeFile(gitignorePath, gitignoreContent, { mode: 0o600 });
   }
 
