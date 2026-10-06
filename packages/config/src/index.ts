@@ -112,14 +112,17 @@ export function validateManifest(manifest: unknown): manifest is ManifestConfig 
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string' &&
     Array.isArray(candidate.environments) &&
-    candidate.environments.every(environment => typeof environment === 'string') &&
+    candidate.environments.every(environment =>
+      typeof environment === 'string' && /^[A-Za-z0-9_-]+$/.test(environment)) &&
     (candidate.repository === undefined ||
       (typeof candidate.repository === 'object' &&
         candidate.repository !== null &&
         typeof (candidate.repository as Record<string, unknown>).owner === 'string' &&
         typeof ((candidate.repository as Record<string, unknown>).repo ??
           (candidate.repository as Record<string, unknown>).name) === 'string')) &&
-    (candidate.defaultEnvironment === undefined || typeof candidate.defaultEnvironment === 'string')
+    (candidate.defaultEnvironment === undefined ||
+      (typeof candidate.defaultEnvironment === 'string' &&
+        /^[A-Za-z0-9_-]+$/.test(candidate.defaultEnvironment)))
   );
 }
 

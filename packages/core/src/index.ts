@@ -267,6 +267,7 @@ export class Core {
    */
   async loadEnvFiles(envName?: string): Promise<Record<string, string>> {
     const targetEnvironment = envName || this.project?.defaultEnvironment;
+    if (targetEnvironment) this.validateEnvironmentName(targetEnvironment);
     const envFiles = targetEnvironment
       ? discoverEnvFilesForEnvironment(this.projectRoot, targetEnvironment)
       : ['.env', '.env.local']
@@ -450,8 +451,12 @@ export class Core {
    * Show difference between local and remote secret names only
    */
   async diff(envName: string): Promise<{ added: string[]; removed: string[]; changed: string[] }> {
-    const local = await this.loadEnvFiles(this.project.defaultEnvironment);
-    if (!this.project) return { added: Object.keys(local), removed: [], changed: [] };
+    this.validateEnvironmentName(envName);
+    if (!this.project) {
+      const local = await this.loadEnvFiles();
+      return { added: Object.keys(local), removed: [], changed: [] };
+    }
+    const local = await this.loadEnvFiles(envName);
     const remoteFile = await this.github.getFile(
       this.project.repository.owner,
       this.project.repository.repo,
