@@ -35,6 +35,13 @@ export interface SecretBundle {
   [key: string]: string;
 }
 
+function isSecretBundle(value: unknown): value is SecretBundle {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(secret => typeof secret === 'string');
+}
+
 export interface SyncStatus {
   local: number;
   remote: number;
@@ -428,9 +435,8 @@ export class Core {
     if (!this.crypto.validateIntegrity(envelope)) throw new Error('Integrity validation failed');
     const passphrase = await this.getPassphrase();
     const decrypted = await this.crypto.openEnvelope(envelope, passphrase);
-    const parsed = JSON.parse(decrypted.toString('utf8'));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-        Object.values(parsed).some((value) => typeof value !== 'string')) {
+    const parsed: unknown = JSON.parse(decrypted.toString('utf8'));
+    if (!isSecretBundle(parsed)) {
       throw new Error('Remote environment data has an invalid format');
     }
 
@@ -598,7 +604,7 @@ export class Core {
     if (!this.project) {
       throw new Error('Project not initialized');
     }
-    const local = await this.loadEnvFiles(this.project?.defaultEnvironment);
+    const local = await this.loadEnvFiles(this.project.defaultEnvironment);
     const localCount = Object.keys(local).length;
     let remoteCount = 0;
     try {
