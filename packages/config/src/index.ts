@@ -25,6 +25,11 @@ export interface ManifestConfig {
   createdAt: string;
   updatedAt: string;
   environments: string[];
+  repository?: {
+    owner: string;
+    repo: string;
+  };
+  defaultEnvironment?: string;
   encryption?: {
     version: number;
     algorithm: string;
@@ -69,7 +74,10 @@ export function loadManifest(projectRoot: string): ManifestConfig | null {
 
   try {
     const content = fs.readFileSync(manifestPath, 'utf8');
-    const manifest = JSON.parse(content) as ManifestConfig;
+    const manifest: unknown = JSON.parse(content);
+    if (!validateManifest(manifest)) {
+      throw new Error('manifest.json has an invalid structure');
+    }
     return manifest;
   } catch (e) {
     throw new Error(`Failed to parse manifest.json: ${(e as Error).message}`);
@@ -91,15 +99,26 @@ export function saveManifest(projectRoot: string, manifest: ManifestConfig): voi
 /**
  * Validate manifest structure
  */
-export function validateManifest(manifest: any): manifest is ManifestConfig {
+export function validateManifest(manifest: unknown): manifest is ManifestConfig {
+  if (!manifest || typeof manifest !== 'object') return false;
+  const candidate = manifest as Record<string, unknown>;
   return (
-    typeof manifest === 'object' &&
-    typeof manifest.formatVersion === 'number' &&
-    typeof manifest.projectId === 'string' &&
-    typeof manifest.projectName === 'string' &&
-    typeof manifest.createdAt === 'string' &&
-    typeof manifest.updatedAt === 'string' &&
-    Array.isArray(manifest.environments)
+    typeof candidate.formatVersion === 'number' &&
+    typeof candidate.projectId === 'string' &&
+    candidate.projectId.length > 0 &&
+    typeof candidate.projectName === 'string' &&
+    candidate.projectName.length > 0 &&
+    typeof candidate.createdAt === 'string' &&
+    typeof candidate.updatedAt === 'string' &&
+    Array.isArray(candidate.environments) &&
+    candidate.environments.every(environment => typeof environment === 'string') &&
+    (candidate.repository === undefined ||
+      (typeof candidate.repository === 'object' &&
+        candidate.repository !== null &&
+        typeof (candidate.repository as Record<string, unknown>).owner === 'string' &&
+        typeof ((candidate.repository as Record<string, unknown>).repo ??
+          (candidate.repository as Record<string, unknown>).name) === 'string')) &&
+    (candidate.defaultEnvironment === undefined || typeof candidate.defaultEnvironment === 'string')
   );
 }
 

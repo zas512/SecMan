@@ -175,4 +175,19 @@ export function discoverEnvFiles(projectRoot: string): string[] {
     .filter(f => fs.existsSync(f));
 }
 
-export default { parse, serialize, load, write, merge, diff, discoverEnvFiles };
+/**
+ * Get the dotenv files that apply to one environment, including custom names.
+ */
+export function discoverEnvFilesForEnvironment(projectRoot: string, environmentName: string): string[] {
+  const environmentFiles = [
+    '.env',
+    '.env.local',
+    `.env.${environmentName}`,
+    `.env.${environmentName}.local`
+  ];
+  return environmentFiles
+    .map(file => path.join(projectRoot, file))
+    .filter(file => fs.existsSync(file));
+}
+
+export default { parse, serialize, load, write, merge, diff, discoverEnvFiles, discoverEnvFilesForEnvironment };
